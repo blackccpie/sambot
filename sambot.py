@@ -1,6 +1,28 @@
-# INITIALIZE MODELS
+
+# The MIT License
+
+# Copyright (c) 2025 Albert Murienne
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 
 import os
+import logging
 import numpy as np
 
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
@@ -12,8 +34,17 @@ from kokoro import KPipeline
 # Or for onnx version:
 # from kokoro_onnx import Kokoro
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+# INITIALIZE MODELS
+
 # Load Whisper model and processor
 #modelcard="openai/whisper-tiny"
+#modelcard="openai/whisper-base"
 modelcard="openai/whisper-small"
 processor = WhisperProcessor.from_pretrained(modelcard)
 model = WhisperForConditionalGeneration.from_pretrained(modelcard)
@@ -34,6 +65,8 @@ tts_pipeline = KPipeline(
 
 def transcribe(audio_path):
     
+    logging.info(f"audio path: {audio_path}")
+
     # load and resample local WAV file to 16kHz mono
     audio_array, sampling_rate = librosa.load(audio_path, sr=16000, mono=True)
 
@@ -45,19 +78,24 @@ def transcribe(audio_path):
 
     # decode token ids to text
     transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
-    print(f"transcription: {transcription[0]}")
+    logging.info(f"transcription: {transcription[0]}")
 
     return transcription[0]
 
-def chat_with_llm(text, history):
+def chat_with_llm(query, history):
     # Prepare messages in OpenAI-style format
     messages = [{"role": "system", "content": "tu es un assistant francophone. Réponds en une phrase courte adaptée pour la synthèse vocale."}]
     for i, (role, content) in enumerate(history):
         messages.append({"role": "user" if role == "You" else "assistant", "content": content})
-    messages.append({"role": "user", "content": text})
+    messages.append({"role": "user", "content": query})
 
-    resp = hf.chat_completion(messages=messages, max_tokens=512)
-    return resp.choices[0].message.content
+    logging.info(f"user queried: {query}")
+
+    answer = hf.chat_completion(messages=messages, max_tokens=512).choices[0].message.content
+
+    logging.info(f"bot answered: {answer}")
+
+    return answer
 
 def synthesize(text, voice="ff_siwis"):
     gen = tts_pipeline(text, voice=voice)
@@ -67,6 +105,9 @@ def synthesize(text, voice="ff_siwis"):
         audio = audio.detach().cpu().numpy()
     elif not isinstance(audio, np.ndarray):
         audio = np.array(audio)
+
+    logging.info(f"voice synthesis ready")
+    
     return (24000, audio)
 
 # BUILD THE GRADIO UI
@@ -97,10 +138,16 @@ with gr.Blocks() as demo:
 
         return gradio_history, audio_tuple
     
-    audio.input(
+    audio.upload(
         run_step,
         inputs=[audio, chatbot_state],
         outputs=[chat_out, tts_player],
     )
 
+    audio.stop_recording(
+        run_step,
+        inputs=[audio, chatbot_state],
+        outputs=[chat_out, tts_player],
+    )
+    
 demo.launch()

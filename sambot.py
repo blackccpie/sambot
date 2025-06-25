@@ -21,6 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import argparse
 import os
 import logging
 import numpy as np
@@ -149,5 +150,24 @@ with gr.Blocks() as demo:
         inputs=[audio, chatbot_state],
         outputs=[chat_out, tts_player],
     )
-    
-demo.launch()
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ip", type=str, default="127.0.0.1", help="IP address to serve Gradio app on")
+    args = parser.parse_args()
+
+    # demo.launch(
+    #         server_name=args.ip,
+    #         server_port=7860,
+    #         share=True)
+
+    demo.launch(
+        server_name=args.ip,
+        server_port=7860,
+        share=False,
+        ssl_certfile='cert.pem',
+        ssl_keyfile='key.pem',
+        ssl_verify=False)
+
+# openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -sha256 -days 365 -nodes

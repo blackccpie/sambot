@@ -56,6 +56,7 @@ hf = InferenceClient(
     #model="Qwen/Qwen2.5-14B-Instruct", 
     #provider="featherless-ai",
     model="meta-llama/Llama-3.3-70B-Instruct",
+    #model="mistralai/Mixtral-8x7B-Instruct-v0.1",
     provider="hf-inference",
     api_key=os.environ.get("HF_API_KEY"))  # remote LLM
 
@@ -108,7 +109,6 @@ def chat_with_llm(query, history):
         """tu es un assistant francophone destiné aux enfants de 8 ans, qui s'appelle Sam.
         Réponds en une ou deux phrases courtes adaptées pour la synthèse vocale."""},
         *history,
-        {"role": "user", "content": query}
     ]
 
     logging.info(f"user queried: {query}")
@@ -157,15 +157,18 @@ with gr.Blocks(js=js) as demo:
     
     state = gr.State(value=AppState())
     
+    gr.Image("images/sam.png", height=300)
+
     input_audio = gr.Audio(
         sources=["microphone"],
         label="Speak",
         type="filepath",
-        waveform_options=gr.WaveformOptions(waveform_color="#B83A4B")
+        waveform_options=gr.WaveformOptions(waveform_color="#DB7FBF")
     )
     chatbot = gr.Chatbot(
         label="Conversation",
-        type="messages"
+        type="messages",
+        visible=False
     )
     output_audio = gr.Audio(
         label="TTS Response",

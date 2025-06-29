@@ -15,9 +15,9 @@ async function main() {
       onSpeechStart: () => {
         console.log("Speech start detected")
         var record = document.querySelector('.record-button');
-        var player = document.getElementById("streaming_out").querySelector(".standard-player")
-        if (player) console.log("paused:", player.paused);
-        if (record != null && (player == null || player.paused)) {
+        var play_button = document.getElementById("streaming_out").querySelector(".play-pause-button")
+        var playing = play_button && (play_button.ariaLabel === "Pause");
+        if (record != null && !playing) {
           console.log(record);
           record.click();
         }

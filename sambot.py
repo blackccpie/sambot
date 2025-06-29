@@ -53,8 +53,11 @@ forced_decoder_ids = processor.get_decoder_prompt_ids(language="french", task="t
 
 # Set up Hugging Face InferenceClient (for LLM like llama)
 hf = InferenceClient(
-    model="Qwen/Qwen2.5-14B-Instruct", 
-    provider="featherless-ai",
+    #model="Qwen/Qwen2.5-14B-Instruct", 
+    #provider="featherless-ai",
+    model="meta-llama/Llama-3.3-70B-Instruct",
+    #model="mistralai/Mixtral-8x7B-Instruct-v0.1",
+    provider="hf-inference",
     api_key=os.environ.get("HF_API_KEY"))  # remote LLM
 
 # Load Kokoro
@@ -65,7 +68,14 @@ tts_pipeline = KPipeline(
 # DEFINE CALLBACKS
 
 def transcribe(audio_path):
-    
+    """
+    Transcribe audio file to text using Whisper model.
+    Args:
+        audio_path (str): Path to the audio file.
+    Returns:
+        str: Transcribed text.
+    """
+
     logging.info(f"audio path: {audio_path}")
 
     # load and resample local WAV file to 16kHz mono
@@ -84,11 +94,22 @@ def transcribe(audio_path):
     return transcription[0]
 
 def chat_with_llm(query, history):
+    """
+    Interact with the LLM using the provided query and conversation history.
+    Args:
+        query (str): User's query.
+        history (list): Conversation history as a list of messages.
+    Returns:
+        str: LLM's response.
+    """
+
     # Prepare messages in OpenAI-style format
-    messages = [{"role": "system", "content": "tu es un assistant francophone. Réponds en une phrase courte adaptée pour la synthèse vocale."}]
-    for i, (role, content) in enumerate(history):
-        messages.append({"role": "user" if role == "You" else "assistant", "content": content})
-    messages.append({"role": "user", "content": query})
+    messages = [
+        {"role": "system", "content": \
+        """tu es un assistant francophone destiné aux enfants de 8 ans, qui s'appelle Sam.
+        Réponds en une ou deux phrases courtes adaptées pour la synthèse vocale."""},
+        *history,
+    ]
 
     logging.info(f"user queried: {query}")
 
@@ -99,6 +120,15 @@ def chat_with_llm(query, history):
     return answer
 
 def synthesize(text, voice="ff_siwis"):
+    """
+    Synthesize text to speech using Kokoro TTS pipeline.
+    Args:
+        text (str): Text to synthesize.
+        voice (str): Voice model to use for synthesis.
+    Returns:
+        tuple: Sampling rate and audio data as a numpy array.
+    """
+
     gen = tts_pipeline(text, voice=voice)
     _, _, audio = next(gen)
     # Convert to numpy if it's a tensor
@@ -113,42 +143,88 @@ def synthesize(text, voice="ff_siwis"):
 
 # BUILD THE GRADIO UI
 
+from vad_js import js, js_reset
+
 import gradio as gr
 
-with gr.Blocks() as demo:
-    chatbot_state = gr.State(value=[])
+from dataclasses import dataclass, field
+
+@dataclass
+class AppState:
+    conversation: list = field(default_factory=list)
+
+with gr.Blocks(js=js) as demo:
     
-    audio = gr.Audio(sources=["upload", "microphone"], type="filepath", label="Speak")
-    chat_out = gr.Chatbot(label="Conversation", type="messages")
-    tts_player = gr.Audio(label="TTS Response", interactive=False, autoplay=True)
+    state = gr.State(value=AppState())
     
-    def run_step(audio_path, chat_history):
+    gr.Image("images/sam.png", height=300)
+
+    input_audio = gr.Audio(
+        sources=["microphone"],
+        label="Speak",
+        type="filepath",
+        waveform_options=gr.WaveformOptions(waveform_color="#DB7FBF")
+    )
+    chatbot = gr.Chatbot(
+        label="Conversation",
+        type="messages",
+        visible=False
+    )
+    output_audio = gr.Audio(
+        label="TTS Response",
+        autoplay=True,
+        visible=True, 
+        elem_id="streaming_out"
+    )
+    
+    def run_step(state: AppState, audio_path,):
+        """
+        Process a single step in the conversation.
+        Args:
+            state (AppState): Current application state.
+            audio_path (str): Path to the recorded audio file.
+        Yields:
+            AppState: Updated application state.
+            list: Conversation history.
+            tuple: Audio tuple for TTS response.
+        """
+
+        if not input_audio:
+            return AppState()
+
         user_text = transcribe(audio_path)  # now using faster-whisper
-        chat_history.append(("You", user_text))
+        state.conversation.append({"role": "user", "content": user_text})
+
+        yield state, state.conversation, None
 
         # LLM and TTS logic unchanged:
-        bot_text = chat_with_llm(user_text, chat_history)
-        chat_history.append(("Bot", bot_text))
+        bot_text = chat_with_llm(user_text, state.conversation)
+        state.conversation.append({"role": "assistant", "content": bot_text})
         audio_tuple = synthesize(bot_text)
 
-        # Convert to Gradio format: list of dicts with 'role' and 'content'
-        gradio_history = [
-            {"role": "user" if role == "You" else "assistant", "content": content}
-            for role, content in chat_history
-        ]
+        yield state, state.conversation, audio_tuple
 
-        return gradio_history, audio_tuple
-    
-    audio.upload(
-        run_step,
-        inputs=[audio, chatbot_state],
-        outputs=[chat_out, tts_player],
+    stream = input_audio.start_recording(
+        lambda audio, state: (audio, state),
+        [input_audio, state],
+        [input_audio, state],
     )
-
-    audio.stop_recording(
+    respond = input_audio.stop_recording(
         run_step,
-        inputs=[audio, chatbot_state],
-        outputs=[chat_out, tts_player],
+        [state, input_audio],
+        [state, chatbot, output_audio]
+    )
+    restart = respond.then(
+        lambda state: None, [state], [input_audio]).then(
+            lambda state: state, state, state, js=js_reset
+        )
+
+    cancel = gr.Button("Restart Conversation", variant="stop")
+    cancel.click(
+        lambda: (AppState(), gr.Audio(recording=False)),
+        None,
+        [state, input_audio],
+        cancels=[respond, restart],
     )
 
 if __name__ == "__main__":

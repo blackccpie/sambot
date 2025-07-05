@@ -12,6 +12,11 @@ async function main() {
     record.textContent = "Just Start Talking!"
     record.style = "width: fit-content; padding-right: 0.5vw;"
     const myvad = await vad.MicVAD.new({
+      model: "v5",
+      positiveSpeechThreshold: 0.3,
+      negativeSpeechThreshold: 0.3,
+      minSpeechFrames: 10,
+      preSpeechPadFrames: 150,
       onSpeechStart: () => {
         console.log("Speech start detected")
         var record = document.querySelector('.record-button');

@@ -55,8 +55,10 @@ hf = InferenceClient(
     #model="Qwen/Qwen2.5-14B-Instruct", 
     #provider="featherless-ai",
     #model="meta-llama/Llama-3.3-70B-Instruct",
-    model="mistralai/Mixtral-8x7B-Instruct-v0.1",
-    provider="hf-inference",
+    #model="mistralai/Mixtral-8x7B-Instruct-v0.1",
+    #provider="hf-inference",
+    model="google/gemma-2-9b-it",
+    provider="groq",
     api_key=os.environ.get("HF_API_KEY"))  # remote LLM
 
 # Load Kokoro

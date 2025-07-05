@@ -45,7 +45,6 @@ logging.basicConfig(
 
 # Load Whisper model and processor
 #modelcard="openai/whisper-tiny"
-#modelcard="openai/whisper-base"
 modelcard="openai/whisper-small"
 processor = WhisperProcessor.from_pretrained(modelcard)
 model = WhisperForConditionalGeneration.from_pretrained(modelcard)
@@ -55,8 +54,8 @@ forced_decoder_ids = processor.get_decoder_prompt_ids(language="french", task="t
 hf = InferenceClient(
     #model="Qwen/Qwen2.5-14B-Instruct", 
     #provider="featherless-ai",
-    model="meta-llama/Llama-3.3-70B-Instruct",
-    #model="mistralai/Mixtral-8x7B-Instruct-v0.1",
+    #model="meta-llama/Llama-3.3-70B-Instruct",
+    model="mistralai/Mixtral-8x7B-Instruct-v0.1",
     provider="hf-inference",
     api_key=os.environ.get("HF_API_KEY"))  # remote LLM
 
@@ -64,6 +63,10 @@ hf = InferenceClient(
 tts_pipeline = KPipeline(
     repo_id='hexgrad/Kokoro-82M',
     lang_code="f")  # french
+
+# Read system prompt from external file
+with open("system_prompt.txt", "r", encoding="utf-8") as f:
+    SYSTEM_PROMPT = f.read().strip()
 
 # DEFINE CALLBACKS
 
@@ -76,7 +79,7 @@ def transcribe(audio_path):
         str: Transcribed text.
     """
 
-    logging.info(f"audio path: {audio_path}")
+    logging.info(f"audio path: {audio_path}") # TODO : check None!!
 
     # load and resample local WAV file to 16kHz mono
     audio_array, sampling_rate = librosa.load(audio_path, sr=16000, mono=True)
@@ -103,11 +106,9 @@ def chat_with_llm(query, history):
         str: LLM's response.
     """
 
-    # Prepare messages in OpenAI-style format
+    # prepare messages in OpenAI-style format
     messages = [
-        {"role": "system", "content": \
-        """tu es un assistant francophone destiné aux enfants de 8 ans, qui s'appelle Sam.
-        Réponds en une ou deux phrases courtes adaptées pour la synthèse vocale."""},
+        {"role": "system", "content": SYSTEM_PROMPT},
         *history,
     ]
 
@@ -131,7 +132,8 @@ def synthesize(text, voice="ff_siwis"):
 
     gen = tts_pipeline(text, voice=voice)
     _, _, audio = next(gen)
-    # Convert to numpy if it's a tensor
+
+    # convert to numpy if it's a tensor
     if hasattr(audio, "detach"):
         audio = audio.detach().cpu().numpy()
     elif not isinstance(audio, np.ndarray):
@@ -233,11 +235,6 @@ if __name__ == "__main__":
     parser.add_argument("--ip", type=str, default="127.0.0.1", help="IP address to serve Gradio app on")
     args = parser.parse_args()
 
-    # demo.launch(
-    #         server_name=args.ip,
-    #         server_port=7860,
-    #         share=True)
-
     demo.launch(
         server_name=args.ip,
         server_port=7860,
@@ -245,5 +242,3 @@ if __name__ == "__main__":
         ssl_certfile='cert.pem',
         ssl_keyfile='key.pem',
         ssl_verify=False)
-
-# openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -sha256 -days 365 -nodes

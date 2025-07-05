@@ -1,0 +1,23 @@
+[project]
+name = "sambot"
+version = "0.1.0"
+description = "audio chatbot"
+authors = [
+    {name = "Albert Murienne"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "gradio (==5.35.0)",
+    "numpy (==2.2.6)",
+    "transformers (==4.52.4)",
+    "librosa (==0.11.0)",
+    "kokoro (==0.9.4)",
+    "torch (==2.5.1)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
